@@ -1,7 +1,9 @@
 import streamlit as st
 import yfinance as yf
 import pandas as pd
-import requests
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 from datetime import datetime
 import os
 
@@ -29,47 +31,51 @@ lista_acciones = [x.strip() for x in acciones_input.split(",") if x.strip()]
 lista_forex = [x.strip() for x in forex_input.split(",") if x.strip()]
 lista_crypto = [x.strip() for x in crypto_input.split(",") if x.strip()]
 
+# --- FUNCIÓN DE ENVÍO DIRECTO POR GMAIL ---
+def enviar_correo_directo(destinatario, asunto, contenido):
+    remitente = st.secrets.get("EMAIL_SENDER", "")
+    password = st.secrets.get("EMAIL_PASSWORD", "")
+    
+    if not remitente or not password:
+        return False, "Faltan las credenciales EMAIL_SENDER y EMAIL_PASSWORD en los Secrets."
+        
+    try:
+        msg = MIMEMultipart()
+        msg['From'] = remitente
+        msg['To'] = destinatario
+        msg['Subject'] = asunto
+        msg.attach(MIMEText(contenido, 'plain', 'utf-8'))
+        
+        server = smtplib.SMTP('smtp.gmail.com', 587)
+        server.starttls()
+        server.login(remitente, password)
+        server.send_message(msg)
+        server.quit()
+        return True, "¡Correo enviado exitosamente de forma directa!"
+    except Exception as e:
+        return False, f"Error al enviar correo: {str(e)}"
+
 # --- PANTALLA PRINCIPAL ---
 st.title("📊 Cuadro de Mando Multitemporal Avanzado")
 
-# CAMPOS DE CORREO VISIBLES TODO EL TIEMPO
 st.markdown("### ✉️ Despachar Informe por Correo Electrónico")
 c1, c2 = st.columns(2)
-correo_guardado = st.secrets.get("EMAIL", "")
-destinatario = c1.text_input("📬 Correo Electrónico Destinatario", value=correo_guardado, placeholder="ejemplo@correo.com")
+destinatario = c1.text_input("📬 Correo Electrónico Destinatario", value=st.secrets.get("EMAIL_SENDER", ""), placeholder="ejemplo@correo.com")
 asunto_correo = c2.text_input("✍️ Asunto del Mensaje", value="Reporte de Mercado - JC Trader Analysis")
 
-# Inicializamos el estado del texto del correo si no existe
 if 'texto_puro_correo' not in st.session_state:
     st.session_state['texto_puro_correo'] = "No se ha realizado ningún escaneo todavía. Los datos están vacíos."
 
-# Formulario HTML invisible para procesar el envío mediante FormSubmit
-url_formulario = f"https://formsubmit.co/{destinatario}" if destinatario else "#"
-
-html_boton_correo = f"""
-<form action="{url_formulario}" method="POST" target="_blank">
-    <input type="hidden" name="_subject" value="{asunto_correo}">
-    <input type="hidden" name="Informe de Mercado" value="{st.session_state['texto_puro_correo']}">
-    <input type="hidden" name="_captcha" value="false">
-    <button type="submit" style="
-        background-color: #ff4b4b;
-        color: white;
-        border: none;
-        padding: 10px 24px;
-        font-size: 16px;
-        border-radius: 8px;
-        cursor: pointer;
-        width: 100%;
-        font-weight: bold;
-        box-shadow: 0px 4px 6px rgba(0,0,0,0.1);
-    ">📧 ENVIAR INFORME POR CORREO</button>
-</form>
-"""
-
-if destinatario:
-    st.markdown(html_boton_correo, unsafe_allow_html=True)
-else:
-    st.warning("Introduce un correo electrónico en el campo de arriba para activar el botón de envío.")
+if st.button("📧 ENVIAR INFORME DIRECTO", use_container_width=True, type="primary"):
+    if not destinatario:
+        st.error("Por favor introduce un correo electrónico de destino.")
+    else:
+        with st.spinner("Enviando correo desde Gmail..."):
+            exito, mensaje = enviar_correo_directo(destinatario, asunto_correo, st.session_state['texto_puro_correo'])
+            if exito:
+                st.success(f"✅ {mensaje} Enviado a: {destinatario}")
+            else:
+                st.error(f"❌ {mensaje}")
 
 st.markdown("---")
 
@@ -118,7 +124,7 @@ if st.sidebar.button("🚀 INICIAR ESCANEO MULTITEMPORAL", use_container_width=T
     datos_h1 = []
     datos_m5 = []
     resumen_alertas = []
-    texto_puro_correo = ""
+    texto_puro_correo = "INFORME DE MERCADO - JC TRADER ANALYSIS\n" + "="*45 + "\n\n"
     
     todos_los_activos = [("Acciones", x) for x in lista_acciones] + [("Forex", x) for x in lista_forex] + [("Crypto", x) for x in lista_crypto]
     
@@ -207,7 +213,7 @@ if st.sidebar.button("🚀 INICIAR ESCANEO MULTITEMPORAL", use_container_width=T
     st.session_state['datos_h1'] = datos_h1
     st.session_state['datos_m5'] = datos_m5
 
-# --- MOSTRAR LOS RESULTADOS DEBAJO DEL BLOQUE DE CORREO ---
+# --- MOSTRAR RESULTADOS ---
 if 'resumen_alertas' in st.session_state:
     st.subheader("📢 Resumen Ejecutivo e Informe de Mercado")
     col1, col2 = st.columns(2)
