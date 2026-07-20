@@ -3,6 +3,7 @@ import yfinance as yf
 import pandas as pd
 import requests
 from datetime import datetime
+import os
 
 st.set_page_config(
     page_title="Analizador Personal",
@@ -10,9 +11,13 @@ st.set_page_config(
     layout="wide"
 )
 
-st.title("📊 Cuadro de Mando Multitemporal Avanzado")
-
 # --- BARRA LATERAL ---
+# Intentamos cargar el logo en la parte superior de la barra lateral si existe en GitHub
+if os.path.exists("logo.png"):
+    st.sidebar.image("logo.png", use_container_width=True)
+elif os.path.exists("logo.jpg"):
+    st.sidebar.image("logo.jpg", use_container_width=True)
+
 st.sidebar.header("⚙️ Configuración del Sistema")
 token_telegram = st.sidebar.text_input("Telegram Bot Token", value=st.secrets.get("TELEGRAM_TOKEN", ""), type="password")
 chat_id_telegram = st.sidebar.text_input("Telegram Chat ID", value=st.secrets.get("TELEGRAM_CHAT_ID", ""), type="password")
@@ -24,6 +29,9 @@ crypto_input = st.sidebar.text_area("Crypto", "BTC-USD,ETH-USD")
 lista_acciones = [x.strip() for x in acciones_input.split(",") if x.strip()]
 lista_forex = [x.strip() for x in forex_input.split(",") if x.strip()]
 lista_crypto = [x.strip() for x in crypto_input.split(",") if x.strip()]
+
+# Título principal de la aplicación
+st.title("📊 Cuadro de Mando Multitemporal Avanzado")
 
 def calcular_indicadores(df):
     if df.empty or len(df) < 30:
@@ -126,7 +134,6 @@ if st.sidebar.button("🚀 INICIAR ESCANEO MULTITEMPORAL", use_container_width=T
             t_h1_pura = tendencia_h1.split(" ")[1]
             t_m5_pura = tendencia_m5.split(" ")[1]
             
-            # NUEVO MOTOR DINÁMICO DE TEXTO ACTIVO POR ACTIVO
             if t_h4_pura == "ALCISTA" and t_h1_pura == "ALCISTA" and t_m5_pura == "ALCISTA" and lm5['RSI'] < 70:
                 recom = "🟢 COMPRA CONFIRMADA"
                 txt = f"🟢 **{activo}** | **COMPRA FUERTE**: Tendencia e indicadores 100% alineados al alza. Precio actual: `{round(lm5['Close'], dec)}`. Próxima Resistencia en M5: `{round(res_m5, dec)}` | Soporte de protección: `{round(soporte_m5, dec)}`."
@@ -155,10 +162,9 @@ if st.sidebar.button("🚀 INICIAR ESCANEO MULTITEMPORAL", use_container_width=T
         except Exception:
             pass
 
-    # --- MOSTRAR EL NUEVO RESUMEN EJECUTIVO (AHORA DETALLADO) ---
+    # --- RESUMEN EJECUTIVO ---
     st.subheader("📢 Resumen Ejecutivo e Informe de Mercado")
     if resumen_alertas:
-        # Los organizamos en dos columnas limpias para que queden estéticos
         col1, col2 = st.columns(2)
         for i, alerta in enumerate(resumen_alertas):
             if i % 2 == 0:
