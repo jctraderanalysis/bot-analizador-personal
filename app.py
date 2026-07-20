@@ -26,7 +26,7 @@ lista_forex = [x.strip() for x in forex_input.split(",") if x.strip()]
 lista_crypto = [x.strip() for x in crypto_input.split(",") if x.strip()]
 
 def calcular_indicadores(df):
-    if df.empty or len(df) < 30:  # Bajamos el umbral mínimo para asegurar que procese M5 con historial corto
+    if df.empty or len(df) < 30:
         return None
     # Tus 4 EMAs
     df['EMA30'] = df['Close'].ewm(span=30, adjust=False).mean()
@@ -48,7 +48,6 @@ def calcular_indicadores(df):
     return df
 
 def evaluar_direccion(last_row):
-    # Si por historial corto alguna EMA da NaN, evitamos la caída del script
     if pd.isna(last_row['EMA30']) or pd.isna(last_row['EMA200']):
         return "🟡 NEUTRO"
     alcista = last_row['EMA30'] > last_row['EMA50'] > last_row['EMA100'] > last_row['EMA200']
@@ -85,7 +84,6 @@ if st.sidebar.button("🚀 INICIAR ESCANEO MULTITEMPORAL", use_container_width=T
         try:
             ticker = yf.Ticker(activo)
             
-            # CORRECCIÓN DE PARÁMETROS: period="5d" para asegurar datos en M5 en stock market
             df_h4 = calcular_indicadores(ticker.history(period="60d", interval="4h"))
             df_h1 = calcular_indicadores(ticker.history(period="15d", interval="1h"))
             df_m5 = calcular_indicadores(ticker.history(period="5d", interval="5m"))
@@ -128,21 +126,25 @@ if st.sidebar.button("🚀 INICIAR ESCANEO MULTITEMPORAL", use_container_width=T
             t_h1_pura = tendencia_h1.split(" ")[1]
             t_m5_pura = tendencia_m5.split(" ")[1]
             
+            # NUEVO MOTOR DINÁMICO DE TEXTO ACTIVO POR ACTIVO
             if t_h4_pura == "ALCISTA" and t_h1_pura == "ALCISTA" and t_m5_pura == "ALCISTA" and lm5['RSI'] < 70:
                 recom = "🟢 COMPRA CONFIRMADA"
-                resumen_alertas.append(f"🟢 **{activo}**: Compra confirmada por alineación total (H4+H1+M5). Soporte inmediato: **{round(soporte_m5, dec)}** | Resistencia: **{round(res_m5, dec)}**")
+                txt = f"🟢 **{activo}** | **COMPRA FUERTE**: Tendencia e indicadores 100% alineados al alza. Precio actual: `{round(lm5['Close'], dec)}`. Próxima Resistencia en M5: `{round(res_m5, dec)}` | Soporte de protección: `{round(soporte_m5, dec)}`."
             elif t_h4_pura == "BAJISTA" and t_h1_pura == "BAJISTA" and t_m5_pura == "BAJISTA" and lm5['RSI'] > 30:
                 recom = "🔴 VENTA CONFIRMADA"
-                resumen_alertas.append(f"🔴 **{activo}**: Venta confirmada por alineación bajista. Soporte: **{round(soporte_m5, dec)}** | Resistencia inmediata: **{round(res_m5, dec)}**")
+                txt = f"🔴 **{activo}** | **VENTA FUERTE**: Estructura bajista e institucional confirmada. Precio actual: `{round(lm5['Close'], dec)}`. Soporte objetivo: `{round(soporte_m5, dec)}` | Resistencia de parada: `{round(res_m5, dec)}`."
             elif t_h1_pura == "ALCISTA" and t_m5_pura == "ALCISTA":
                 recom = "🟡 COMPRA RIESGO"
-                resumen_alertas.append(f"🟡 **{activo}**: Rebote de corto plazo (M5/H1 Alcista, pero H4 en contra o rango). Soporte: **{round(soporte_m5, dec)}**")
+                txt = f"🟡 **{activo}** | **REBOTE EN CORTO**: Fuerza compradora en M5 y H1, pero ojo: la tendencia macro H4 está en {tendencia_h4}. Soporte: `{round(soporte_m5, dec)}`."
             elif t_h1_pura == "BAJISTA" and t_m5_pura == "BAJISTA":
                 recom = "🟡 VENTA RIESGO"
-                resumen_alertas.append(f"🟡 **{activo}**: Presión a corto plazo (M5/H1 Bajista, H4 en contra). Resistencia: **{round(res_m5, dec)}**")
+                txt = f"🟡 **{activo}** | **CORRECCIÓN EN CORTO**: Presión bajista local (M5/H1), pero H4 sigue en {tendencia_h4}. Resistencia: `{round(res_m5, dec)}`."
             else:
                 recom = "⚪ NEUTRO"
+                txt = f"⚪ **{activo}** | **RANGO / COMPRESIÓN**: Las temporalidades están cruzadas (H4: {t_h4_pura} | H1: {t_h1_pura}). Esperar ruptura. Soporte: `{round(soporte_m5, dec)}` | Resistencia: `{round(res_m5, dec)}`."
                 
+            resumen_alertas.append(txt)
+            
             datos_m5.append({
                 "Activo": activo, "C/C M5": round(lm5['Close'], dec),
                 "Gatillo M5": tendencia_m5, 
@@ -153,13 +155,18 @@ if st.sidebar.button("🚀 INICIAR ESCANEO MULTITEMPORAL", use_container_width=T
         except Exception:
             pass
 
-    # --- RESUMEN EJECUTIVO ---
-    st.subheader("📢 Resumen Ejecutivo de Tendencias y Oportunidades")
+    # --- MOSTRAR EL NUEVO RESUMEN EJECUTIVO (AHORA DETALLADO) ---
+    st.subheader("📢 Resumen Ejecutivo e Informe de Mercado")
     if resumen_alertas:
-        for alerta in resumen_alertas:
-            st.markdown(alerta)
+        # Los organizamos en dos columnas limpias para que queden estéticos
+        col1, col2 = st.columns(2)
+        for i, alerta in enumerate(resumen_alertas):
+            if i % 2 == 0:
+                col1.markdown(alerta)
+            else:
+                col2.markdown(alerta)
     else:
-        st.info("⚪ Todos los activos se encuentran actualmente en estado **NEUTRO** o los mercados tradicionales están cerrados.")
+        st.info("No se pudieron generar alertas. Revisa los datos de los tickers.")
 
     st.markdown("---")
 
