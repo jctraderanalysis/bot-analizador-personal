@@ -54,10 +54,25 @@ def evaluar_direccion(last_row):
     if bajista: return "🔴 BAJISTA"
     return "🟡 NEUTRO"
 
+def calcular_soporte_resistencia(df):
+    """Calcula Soporte y Resistencia usando Puntos Pivote basados en la acción del precio reciente"""
+    if df.empty or len(df) < 2:
+        return 0, 0
+    # Usamos la vela previa completada para evitar fluctuaciones agresivas
+    high = df['High'].iloc[-2]
+    low = df['Low'].iloc[-2]
+    close = df['Close'].iloc[-2]
+    
+    pivot = (high + low + close) / 3
+    resistencia = (2 * pivot) - low
+    soporte = (2 * pivot) - high
+    return soporte, resistencia
+
 if st.sidebar.button("🚀 INICIAR ESCANEO MULTITEMPORAL", use_container_width=True):
     datos_h4 = []
     datos_h1 = []
     datos_m5 = []
+    resumen_alertas = []
     
     todos_los_activos = [("Acciones", x) for x in lista_acciones] + [("Forex", x) for x in lista_forex] + [("Crypto", x) for x in lista_crypto]
     
@@ -82,6 +97,9 @@ if st.sidebar.button("🚀 INICIAR ESCANEO MULTITEMPORAL", use_container_width=T
             lm5 = df_m5.iloc[-1]
             
             dec = 4 if cat == "Forex" else 2
+            
+            # Calcular niveles clave en M5 para la ejecución operativa
+            soporte_m5, res_m5 = calcular_soporte_resistencia(df_m5)
             
             # --- TABLA 1: DATOS H4 ---
             tendencia_h4 = evaluar_direccion(lh4)
@@ -112,26 +130,40 @@ if st.sidebar.button("🚀 INICIAR ESCANEO MULTITEMPORAL", use_container_width=T
             
             if t_h4_pura == "ALCISTA" and t_h1_pura == "ALCISTA" and t_m5_pura == "ALCISTA" and lm5['RSI'] < 70:
                 recom = "🟢 COMPRA CONFIRMADA"
+                resumen_alertas.append(f"🟢 **{activo}**: Compra confirmada por alineación total (H4+H1+M5). Soporte inmediato: **{round(soporte_m5, dec)}** | Resistencia: **{round(res_m5, dec)}**")
             elif t_h4_pura == "BAJISTA" and t_h1_pura == "BAJISTA" and t_m5_pura == "BAJISTA" and lm5['RSI'] > 30:
                 recom = "🔴 VENTA CONFIRMADA"
+                resumen_alertas.append(f"🔴 **{activo}**: Venta confirmada por alineación bajista. Soporte: **{round(soporte_m5, dec)}** | Resistencia inmediata: **{round(res_m5, dec)}**")
             elif t_h1_pura == "ALCISTA" and t_m5_pura == "ALCISTA":
-                recom = "🟡 COMPRA RIESGO (H4 Rango)"
+                recom = "🟡 COMPRA RIESGO"
+                resumen_alertas.append(f"🟡 **{activo}**: Rebote de corto plazo (M5/H1 Alcista, pero H4 en contra o rango). Soporte: **{round(soporte_m5, dec)}**")
             elif t_h1_pura == "BAJISTA" and t_m5_pura == "BAJISTA":
-                recom = "🟡 VENTA RIESGO (H4 Rango)"
+                recom = "🟡 VENTA RIESGO"
+                resumen_alertas.append(f"🟡 **{activo}**: Presión a corto plazo (M5/H1 Bajista, H4 en contra). Resistencia: **{round(res_m5, dec)}**")
             else:
-                recom = "⚪ NEUTRO (Esperar Alineación)"
+                recom = "⚪ NEUTRO"
                 
             datos_m5.append({
                 "Activo": activo, "C/C M5": round(lm5['Close'], dec),
-                "Gatillo M5": tendencia_m5, "EMA 30": round(lm5['EMA30'], dec),
-                "EMA 50": round(lm5['EMA50'], dec), "EMA 100": round(lm5['EMA100'], dec),
-                "EMA 200": round(lm5['EMA200'], dec), "RSI M5": round(lm5['RSI'], 1),
-                "MACD M5": round(lm5['MACD'], dec), "RECOMENDACIÓN OPE": recom
+                "Gatillo M5": tendencia_m5, 
+                "RSI M5": round(lm5['RSI'], 1), "MACD M5": round(lm5['MACD'], dec),
+                "Soporte (S1)": round(soporte_m5, dec), "Resistencia (R1)": round(res_m5, dec),
+                "RECOMENDACIÓN OPE": recom
             })
         except Exception:
             pass
 
-    # --- NUEVO MOTOR DE ESTILOS AVANZADOS ---
+    # --- NOVEDAD: BLOQUE DE RESUMEN EJECUTIVO (ARRIBA) ---
+    st.subheader("📢 Resumen Ejecutivo de Tendencias y Oportunidades")
+    if resumen_alertas:
+        for alerta in resumen_alertas:
+            st.markdown(alerta)
+    else:
+        st.info("⚪ Todos los activos se encuentran actualmente en estado **NEUTRO**. Las temporalidades están cruzadas o en rango lateral; se recomienda esperar una alineación clara antes de colocar órdenes.")
+
+    st.markdown("---")
+
+    # --- LÓGICA DE ESTILOS DINÁMICOS POR COLUMNA ---
     def color_general(val):
         if "🟢" in str(val): return 'background-color: #d4edda; color: #155724; font-weight: bold;'
         if "🔴" in str(val): return 'background-color: #f8d7da; color: #721c24; font-weight: bold;'
@@ -154,28 +186,24 @@ if st.sidebar.button("🚀 INICIAR ESCANEO MULTITEMPORAL", use_container_width=T
             return ''
         except: return ''
 
-    def color_precio_vs_emas(row, col_precio):
-        """Pinta el precio comparado con la posición de todas las EMAs del renglón"""
+    def color_precio_vs_emas(row, col_precio, df_origen):
         styles = [''] * len(row)
         idx_precio = row.index.get_loc(col_precio)
         try:
             p = float(row[col_precio])
-            e30 = float(row['EMA 30'])
-            e50 = float(row['EMA 50'])
-            e100 = float(row['EMA 100'])
-            e200 = float(row['EMA 200'])
+            # Si el dataframe tiene las columnas de EMAs mapeadas, las usamos para el cálculo
+            e30 = float(row['EMA 30']) if 'EMA 30' in row else p
+            e50 = float(row['EMA 50']) if 'EMA 50' in row else p
+            e100 = float(row['EMA 100']) if 'EMA 100' in row else p
+            e200 = float(row['EMA 200']) if 'EMA 200' in row else p
             
             medias = [e30, e50, e100, e200]
-            max_ema = max(medias)
-            min_ema = min(medias)
+            if max(medias) == min(medias): return styles
             
-            # Encima de todas las medias
-            if p > max_ema:
+            if p > max(medias):
                 styles[idx_precio] = 'background-color: #c6efce; color: #006100; font-weight: bold;'
-            # Debajo de todas las medias
-            elif p < min_ema:
+            elif p < min(medias):
                 styles[idx_precio] = 'background-color: #ffc7ce; color: #9c0006; font-weight: bold;'
-            # En medio de los cruces/líneas
             else:
                 styles[idx_precio] = 'background-color: #ffeb9c; color: #9c6500; font-weight: bold;'
         except:
@@ -190,7 +218,7 @@ if st.sidebar.button("🚀 INICIAR ESCANEO MULTITEMPORAL", use_container_width=T
             df_h4.style.map(color_general, subset=['Tendencia H4'])
                       .map(color_rsi, subset=['RSI H4'])
                       .map(color_macd, subset=['MACD H4'])
-                      .apply(color_precio_vs_emas, axis=1, col_precio='C/C H4'), 
+                      .apply(color_precio_vs_emas, axis=1, col_precio='C/C H4', df_origen=df_h4), 
             use_container_width=True, hide_index=True
         )
         
@@ -202,7 +230,7 @@ if st.sidebar.button("🚀 INICIAR ESCANEO MULTITEMPORAL", use_container_width=T
             df_h1.style.map(color_general, subset=['Tendencia H1'])
                       .map(color_rsi, subset=['RSI H1'])
                       .map(color_macd, subset=['MACD H1'])
-                      .apply(color_precio_vs_emas, axis=1, col_precio='C/C H1'), 
+                      .apply(color_precio_vs_emas, axis=1, col_precio='C/C H1', df_origen=df_h1), 
             use_container_width=True, hide_index=True
         )
         
@@ -213,11 +241,10 @@ if st.sidebar.button("🚀 INICIAR ESCANEO MULTITEMPORAL", use_container_width=T
         st.dataframe(
             df_m5.style.map(color_general, subset=['Gatillo M5', 'RECOMENDACIÓN OPE'])
                       .map(color_rsi, subset=['RSI M5'])
-                      .map(color_macd, subset=['MACD M5'])
-                      .apply(color_precio_vs_emas, axis=1, col_precio='C/C M5'), 
+                      .map(color_macd, subset=['MACD M5']), 
             use_container_width=True, hide_index=True
         )
 
     st.caption(f"Última actualización de mercado: {datetime.now().strftime('%H:%M:%S')}")
 else:
-    st.info("Presiona el botón para procesar el escaneo con el nuevo mapa de calor dinámico.")
+    st.info("Presiona el botón para procesar el escaneo con el nuevo panel analítico.")
