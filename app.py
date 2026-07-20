@@ -131,31 +131,56 @@ if st.sidebar.button("🚀 INICIAR ESCANEO MULTITEMPORAL", use_container_width=T
         except Exception:
             pass
 
-    # --- LÓGICA DE ESTILOS DINÁMICOS POR COLUMNA ---
+    # --- NUEVO MOTOR DE ESTILOS AVANZADOS ---
     def color_general(val):
-        """Aplica colores a las columnas de Tendencias y Recomendación"""
         if "🟢" in str(val): return 'background-color: #d4edda; color: #155724; font-weight: bold;'
         if "🔴" in str(val): return 'background-color: #f8d7da; color: #721c24; font-weight: bold;'
         if "🟡" in str(val): return 'background-color: #fff3cd; color: #856404;'
         return ''
 
     def color_rsi(val):
-        """Pinta el RSI: >55 Verde Claro, <45 Rojo Claro, entremedio Amarillo Neutro"""
         try:
             v = float(val)
             if v > 55: return 'background-color: #d4edda; color: #155724; font-weight: bold;'
             if v < 45: return 'background-color: #f8d7da; color: #721c24; font-weight: bold;'
-            return 'background-color: #fff3cd; color: #856404;' # Neutro
+            return 'background-color: #f2f2f2; color: #595959;'
         except: return ''
 
     def color_macd(val):
-        """Pinta el MACD: >0 Verde Claro, <0 Rojo Claro"""
         try:
             v = float(val)
             if v > 0: return 'background-color: #e2f0d9; color: #385723; font-weight: bold;'
             if v < 0: return 'background-color: #fce4d6; color: #c65911; font-weight: bold;'
             return ''
         except: return ''
+
+    def color_precio_vs_emas(row, col_precio):
+        """Pinta el precio comparado con la posición de todas las EMAs del renglón"""
+        styles = [''] * len(row)
+        idx_precio = row.index.get_loc(col_precio)
+        try:
+            p = float(row[col_precio])
+            e30 = float(row['EMA 30'])
+            e50 = float(row['EMA 50'])
+            e100 = float(row['EMA 100'])
+            e200 = float(row['EMA 200'])
+            
+            medias = [e30, e50, e100, e200]
+            max_ema = max(medias)
+            min_ema = min(medias)
+            
+            # Encima de todas las medias
+            if p > max_ema:
+                styles[idx_precio] = 'background-color: #c6efce; color: #006100; font-weight: bold;'
+            # Debajo de todas las medias
+            elif p < min_ema:
+                styles[idx_precio] = 'background-color: #ffc7ce; color: #9c0006; font-weight: bold;'
+            # En medio de los cruces/líneas
+            else:
+                styles[idx_precio] = 'background-color: #ffeb9c; color: #9c6500; font-weight: bold;'
+        except:
+            pass
+        return styles
 
     # --- MOSTRAR TABLAS ---
     st.markdown("### 🏛️ 1. Matriz de Tendencia Macro (H4)")
@@ -164,7 +189,8 @@ if st.sidebar.button("🚀 INICIAR ESCANEO MULTITEMPORAL", use_container_width=T
         st.dataframe(
             df_h4.style.map(color_general, subset=['Tendencia H4'])
                       .map(color_rsi, subset=['RSI H4'])
-                      .map(color_macd, subset=['MACD H4']), 
+                      .map(color_macd, subset=['MACD H4'])
+                      .apply(color_precio_vs_emas, axis=1, col_precio='C/C H4'), 
             use_container_width=True, hide_index=True
         )
         
@@ -175,7 +201,8 @@ if st.sidebar.button("🚀 INICIAR ESCANEO MULTITEMPORAL", use_container_width=T
         st.dataframe(
             df_h1.style.map(color_general, subset=['Tendencia H1'])
                       .map(color_rsi, subset=['RSI H1'])
-                      .map(color_macd, subset=['MACD H1']), 
+                      .map(color_macd, subset=['MACD H1'])
+                      .apply(color_precio_vs_emas, axis=1, col_precio='C/C H1'), 
             use_container_width=True, hide_index=True
         )
         
@@ -186,10 +213,11 @@ if st.sidebar.button("🚀 INICIAR ESCANEO MULTITEMPORAL", use_container_width=T
         st.dataframe(
             df_m5.style.map(color_general, subset=['Gatillo M5', 'RECOMENDACIÓN OPE'])
                       .map(color_rsi, subset=['RSI M5'])
-                      .map(color_macd, subset=['MACD M5']), 
+                      .map(color_macd, subset=['MACD M5'])
+                      .apply(color_precio_vs_emas, axis=1, col_precio='C/C M5'), 
             use_container_width=True, hide_index=True
         )
 
-    st.caption(f"Última actualización general de mercado a las: {datetime.now().strftime('%H:%M:%S')}")
+    st.caption(f"Última actualización de mercado: {datetime.now().strftime('%H:%M:%S')}")
 else:
-    st.info("Presiona el botón en la barra lateral para procesar el análisis multitemporal.")
+    st.info("Presiona el botón para procesar el escaneo con el nuevo mapa de calor dinámico.")
