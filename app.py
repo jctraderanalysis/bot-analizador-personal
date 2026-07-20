@@ -126,7 +126,7 @@ if st.sidebar.button("🚀 INICIAR ESCANEO MULTITEMPORAL", use_container_width=T
             return 'color: #6c757d;'
 
         # CÓDIGO NUEVO (Corregido):
-st.dataframe(df_vis.style.map(color_recomendacion, subset=['RECOMENDACIÓN']), use_container_width=True, hide_index=True)
+        st.dataframe(df_vis.style.map(color_recomendacion, subset=['RECOMENDACIÓN']), use_container_width=True, hide_index=True)
         st.metric("Última Actualización", datetime.now().strftime("%H:%M:%S"))
     else:
         st.error("No se pudieron recopilar suficientes datos de los servidores. Reintenta el escaneo.")
