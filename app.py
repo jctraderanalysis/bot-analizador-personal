@@ -26,7 +26,7 @@ lista_forex = [x.strip() for x in forex_input.split(",") if x.strip()]
 lista_crypto = [x.strip() for x in crypto_input.split(",") if x.strip()]
 
 def calcular_indicadores(df):
-    if df.empty or len(df) < 200:
+    if df.empty or len(df) < 30:  # Bajamos el umbral mínimo para asegurar que procese M5 con historial corto
         return None
     # Tus 4 EMAs
     df['EMA30'] = df['Close'].ewm(span=30, adjust=False).mean()
@@ -48,6 +48,9 @@ def calcular_indicadores(df):
     return df
 
 def evaluar_direccion(last_row):
+    # Si por historial corto alguna EMA da NaN, evitamos la caída del script
+    if pd.isna(last_row['EMA30']) or pd.isna(last_row['EMA200']):
+        return "🟡 NEUTRO"
     alcista = last_row['EMA30'] > last_row['EMA50'] > last_row['EMA100'] > last_row['EMA200']
     bajista = last_row['EMA30'] < last_row['EMA50'] < last_row['EMA100'] < last_row['EMA200']
     if alcista: return "🟢 ALCISTA"
@@ -55,10 +58,8 @@ def evaluar_direccion(last_row):
     return "🟡 NEUTRO"
 
 def calcular_soporte_resistencia(df):
-    """Calcula Soporte y Resistencia usando Puntos Pivote basados en la acción del precio reciente"""
     if df.empty or len(df) < 2:
         return 0, 0
-    # Usamos la vela previa completada para evitar fluctuaciones agresivas
     high = df['High'].iloc[-2]
     low = df['Low'].iloc[-2]
     close = df['Close'].iloc[-2]
@@ -84,10 +85,10 @@ if st.sidebar.button("🚀 INICIAR ESCANEO MULTITEMPORAL", use_container_width=T
         try:
             ticker = yf.Ticker(activo)
             
-            # Descarga de datos
+            # CORRECCIÓN DE PARÁMETROS: period="5d" para asegurar datos en M5 en stock market
             df_h4 = calcular_indicadores(ticker.history(period="60d", interval="4h"))
             df_h1 = calcular_indicadores(ticker.history(period="15d", interval="1h"))
-            df_m5 = calcular_indicadores(ticker.history(period="2d", interval="5m"))
+            df_m5 = calcular_indicadores(ticker.history(period="5d", interval="5m"))
             
             if df_h4 is None or df_h1 is None or df_m5 is None:
                 continue
@@ -98,7 +99,6 @@ if st.sidebar.button("🚀 INICIAR ESCANEO MULTITEMPORAL", use_container_width=T
             
             dec = 4 if cat == "Forex" else 2
             
-            # Calcular niveles clave en M5 para la ejecución operativa
             soporte_m5, res_m5 = calcular_soporte_resistencia(df_m5)
             
             # --- TABLA 1: DATOS H4 ---
@@ -153,17 +153,17 @@ if st.sidebar.button("🚀 INICIAR ESCANEO MULTITEMPORAL", use_container_width=T
         except Exception:
             pass
 
-    # --- NOVEDAD: BLOQUE DE RESUMEN EJECUTIVO (ARRIBA) ---
+    # --- RESUMEN EJECUTIVO ---
     st.subheader("📢 Resumen Ejecutivo de Tendencias y Oportunidades")
     if resumen_alertas:
         for alerta in resumen_alertas:
             st.markdown(alerta)
     else:
-        st.info("⚪ Todos los activos se encuentran actualmente en estado **NEUTRO**. Las temporalidades están cruzadas o en rango lateral; se recomienda esperar una alineación clara antes de colocar órdenes.")
+        st.info("⚪ Todos los activos se encuentran actualmente en estado **NEUTRO** o los mercados tradicionales están cerrados.")
 
     st.markdown("---")
 
-    # --- LÓGICA DE ESTILOS DINÁMICOS POR COLUMNA ---
+    # --- LÓGICA DE ESTILOS ---
     def color_general(val):
         if "🟢" in str(val): return 'background-color: #d4edda; color: #155724; font-weight: bold;'
         if "🔴" in str(val): return 'background-color: #f8d7da; color: #721c24; font-weight: bold;'
@@ -191,7 +191,6 @@ if st.sidebar.button("🚀 INICIAR ESCANEO MULTITEMPORAL", use_container_width=T
         idx_precio = row.index.get_loc(col_precio)
         try:
             p = float(row[col_precio])
-            # Si el dataframe tiene las columnas de EMAs mapeadas, las usamos para el cálculo
             e30 = float(row['EMA 30']) if 'EMA 30' in row else p
             e50 = float(row['EMA 50']) if 'EMA 50' in row else p
             e100 = float(row['EMA 100']) if 'EMA 100' in row else p
@@ -247,4 +246,4 @@ if st.sidebar.button("🚀 INICIAR ESCANEO MULTITEMPORAL", use_container_width=T
 
     st.caption(f"Última actualización de mercado: {datetime.now().strftime('%H:%M:%S')}")
 else:
-    st.info("Presiona el botón para procesar el escaneo con el nuevo panel analítico.")
+    st.info("Presiona el botón en la barra lateral para procesar el análisis multitemporal.")
