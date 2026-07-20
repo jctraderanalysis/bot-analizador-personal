@@ -33,7 +33,7 @@ def enviar_telegram(mensaje):
         except Exception: pass
 
 def calcular_indicadores_completos(df):
-    # Tus 4 EMAs
+    # Tus 4 EMAs Clave
     df['EMA30'] = df['Close'].ewm(span=30, adjust=False).mean()
     df['EMA50'] = df['Close'].ewm(span=50, adjust=False).mean()
     df['EMA100'] = df['Close'].ewm(span=100, adjust=False).mean()
@@ -72,29 +72,39 @@ if st.sidebar.button("🚀 INICIAR ESCANEO DE MERCADOS", use_container_width=Tru
             last_h1 = df_h1.iloc[-1]
             prev_h1 = df_h1.iloc[-2]
             
-            # Evaluación matemática de tu estrategia
+            # Evaluación de alineación en abanico de tus 4 EMAs
             alcista_h1 = last_h1['EMA30'] > last_h1['EMA50'] > last_h1['EMA100'] > last_h1['EMA200']
             bajista_h1 = last_h1['EMA30'] < last_h1['EMA50'] < last_h1['EMA100'] < last_h1['EMA200']
             
-            # Definir estado visual de las EMAs
             estado_emas = "🟢 Alcistas" if alcista_h1 else ("🔴 Bajistas" if bajista_h1 else "🟡 Entrelazadas")
+            
+            # Formato visual del RSI según niveles operativos
+            rsi_val = last_h1['RSI']
+            if rsi_val >= 70: estado_rsi = f"🚨 {rsi_val:.2f} (Sobrecompra)"
+            elif rsi_val <= 30: estado_rsi = f"🛒 {rsi_val:.2f} (Sobreventa)"
+            else: estado_rsi = f"⚖️ {rsi_val:.2f}"
             
             cruce_positivo_macd = (prev_h1['MACD'] < 0) and (last_h1['MACD'] > 0)
             cruce_negativo_macd = (prev_h1['MACD'] > 0) and (last_h1['MACD'] < 0)
             
             estado_macd = "🔥 Cruce Alcista 0+" if cruce_positivo_macd else ("💥 Cruce Bajista 0-" if cruce_negativo_macd else f"{last_h1['MACD']:.4f}")
             
-            # Guardar datos para la tabla informativa
+            # Redondeo adaptativo dinámico según el tipo de activo (Forex usa más decimales)
+            dec = 4 if cat == "Forex" else 2
+            
             filas_monitoreo.append({
                 "Mercado": cat,
                 "Activo": activo,
-                "Precio Actual": round(last_h1['Close'], 4),
+                "Precio Actual": round(last_h1['Close'], dec),
                 "Estructura EMAs": estado_emas,
-                "RSI (14)": round(last_h1['RSI'], 2),
-                "Estado MACD": estado_macd
+                "EMA 30": round(last_h1['EMA30'], dec),
+                "EMA 50": round(last_h1['EMA50'], dec),
+                "EMA 100": round(last_h1['EMA100'], dec),
+                "EMA 200": round(last_h1['EMA200'], dec),
+                "RSI (14)": estado_rsi,
+                "Hist. MACD": estado_macd
             })
             
-            # Gatillos de alertas
             if alcista_h1 and cruce_positivo_macd:
                 alertas_encontradas.append((activo, cat, "🟢 COMPRA", "EMAs alineadas + Cruce MACD 0+"))
             elif bajista_h1 and cruce_negativo_macd:
@@ -102,7 +112,7 @@ if st.sidebar.button("🚀 INICIAR ESCANEO DE MERCADOS", use_container_width=Tru
         except Exception:
             pass
             
-    # --- RENDERIZADO DE LA INFORMACIÓN EN PANTALLA ---
+    # --- INTERFAZ DE PANTALLA ---
     col1, col2 = st.columns([2, 1])
     
     with col1:
@@ -114,7 +124,6 @@ if st.sidebar.button("🚀 INICIAR ESCANEO DE MERCADOS", use_container_width=Tru
                 else:
                     st.error(f"**{tipo} en {act} ({cat})**: {det}")
             
-            # Enviar aviso rápido a Telegram
             msg_tele = "🔥 *ALERTAS DETECTADAS* 🔥\n\n" + "\n".join([f"{t} en {a}" for a, c, t, d in alertas_encontradas])
             enviar_telegram(msg_tele)
         else:
@@ -124,9 +133,9 @@ if st.sidebar.button("🚀 INICIAR ESCANEO DE MERCADOS", use_container_width=Tru
         st.subheader("📊 Control Operativo")
         st.metric("Último Escaneo Realizado", datetime.now().strftime("%H:%M:%S"))
         
-    # --- NUEVA SECCIÓN: MATRIZ DE DATOS EN TIEMPO REAL ---
+    # --- MATRIZ EXTENDIDA ---
     st.markdown("---")
-    st.subheader("📋 Matriz de Datos Técnicos en Vivo (H1)")
+    st.subheader("📋 Matriz Completa de Datos Técnicos en Vivo (H1)")
     if filas_monitoreo:
         df_vis = pd.DataFrame(filas_monitoreo)
         st.dataframe(df_vis, use_container_width=True, hide_index=True)
