@@ -77,13 +77,13 @@ if st.sidebar.button("🚀 INICIAR ESCANEO MULTITEMPORAL", use_container_width=T
             if df_h4 is None or df_h1 is None or df_m5 is None:
                 continue
                 
-            lh4, ph4 = df_h4.iloc[-1], df_h4.iloc[-2]
-            lh1, ph1 = df_h1.iloc[-1], df_h1.iloc[-2]
-            lm5, pm5 = df_m5.iloc[-1], df_m5.iloc[-2]
+            lh4 = df_h4.iloc[-1]
+            lh1 = df_h1.iloc[-1]
+            lm5 = df_m5.iloc[-1]
             
             dec = 4 if cat == "Forex" else 2
             
-            # --- TABLA 1: DATOS H4 (TENDENCIA MACRO) ---
+            # --- TABLA 1: DATOS H4 ---
             tendencia_h4 = evaluar_direccion(lh4)
             datos_h4.append({
                 "Activo": activo, "C/C H4": round(lh4['Close'], dec),
@@ -93,7 +93,7 @@ if st.sidebar.button("🚀 INICIAR ESCANEO MULTITEMPORAL", use_container_width=T
                 "MACD H4": round(lh4['MACD'], dec)
             })
             
-            # --- TABLA 2: DATOS H1 (ESTRUCTURA INTERMEDIA) ---
+            # --- TABLA 2: DATOS H1 ---
             tendencia_h1 = evaluar_direccion(lh1)
             datos_h1.append({
                 "Activo": activo, "C/C H1": round(lh1['Close'], dec),
@@ -103,10 +103,9 @@ if st.sidebar.button("🚀 INICIAR ESCANEO MULTITEMPORAL", use_container_width=T
                 "MACD H1": round(lh1['MACD'], dec)
             })
             
-            # --- TABLA 3: DATOS M5 (DISPARADOR & RECOMENDACIÓN) ---
+            # --- TABLA 3: DATOS M5 ---
             tendencia_m5 = evaluar_direccion(lm5)
             
-            # Lógica de alineación de piernas
             t_h4_pura = tendencia_h4.split(" ")[1]
             t_h1_pura = tendencia_h1.split(" ")[1]
             t_m5_pura = tendencia_m5.split(" ")[1]
@@ -116,9 +115,9 @@ if st.sidebar.button("🚀 INICIAR ESCANEO MULTITEMPORAL", use_container_width=T
             elif t_h4_pura == "BAJISTA" and t_h1_pura == "BAJISTA" and t_m5_pura == "BAJISTA" and lm5['RSI'] > 30:
                 recom = "🔴 VENTA CONFIRMADA"
             elif t_h1_pura == "ALCISTA" and t_m5_pura == "ALCISTA":
-                recom = "🟡 COMPRA RIESGO (H4 Neutro/Bajista)"
+                recom = "🟡 COMPRA RIESGO (H4 Rango)"
             elif t_h1_pura == "BAJISTA" and t_m5_pura == "BAJISTA":
-                recom = "🟡 VENTA RIESGO (H4 Neutro/Alcista)"
+                recom = "🟡 VENTA RIESGO (H4 Rango)"
             else:
                 recom = "⚪ NEUTRO (Esperar Alineación)"
                 
@@ -132,30 +131,65 @@ if st.sidebar.button("🚀 INICIAR ESCANEO MULTITEMPORAL", use_container_width=T
         except Exception:
             pass
 
-    # --- RENDERIZADO DE LAS TRES TABLAS ---
-    def color_filas(val):
+    # --- LÓGICA DE ESTILOS DINÁMICOS POR COLUMNA ---
+    def color_general(val):
+        """Aplica colores a las columnas de Tendencias y Recomendación"""
         if "🟢" in str(val): return 'background-color: #d4edda; color: #155724; font-weight: bold;'
         if "🔴" in str(val): return 'background-color: #f8d7da; color: #721c24; font-weight: bold;'
         if "🟡" in str(val): return 'background-color: #fff3cd; color: #856404;'
         return ''
 
+    def color_rsi(val):
+        """Pinta el RSI: >55 Verde Claro, <45 Rojo Claro, entremedio Amarillo Neutro"""
+        try:
+            v = float(val)
+            if v > 55: return 'background-color: #d4edda; color: #155724; font-weight: bold;'
+            if v < 45: return 'background-color: #f8d7da; color: #721c24; font-weight: bold;'
+            return 'background-color: #fff3cd; color: #856404;' # Neutro
+        except: return ''
+
+    def color_macd(val):
+        """Pinta el MACD: >0 Verde Claro, <0 Rojo Claro"""
+        try:
+            v = float(val)
+            if v > 0: return 'background-color: #e2f0d9; color: #385723; font-weight: bold;'
+            if v < 0: return 'background-color: #fce4d6; color: #c65911; font-weight: bold;'
+            return ''
+        except: return ''
+
+    # --- MOSTRAR TABLAS ---
     st.markdown("### 🏛️ 1. Matriz de Tendencia Macro (H4)")
     if datos_h4:
         df_h4 = pd.DataFrame(datos_h4)
-        st.dataframe(df_h4.style.map(color_filas, subset=['Tendencia H4']), use_container_width=True, hide_index=True)
+        st.dataframe(
+            df_h4.style.map(color_general, subset=['Tendencia H4'])
+                      .map(color_rsi, subset=['RSI H4'])
+                      .map(color_macd, subset=['MACD H4']), 
+            use_container_width=True, hide_index=True
+        )
         
     st.markdown("---")
     st.markdown("### 📈 2. Matriz de Estructura Intermedia (H1)")
     if datos_h1:
         df_h1 = pd.DataFrame(datos_h1)
-        st.dataframe(df_h1.style.map(color_filas, subset=['Tendencia H1']), use_container_width=True, hide_index=True)
+        st.dataframe(
+            df_h1.style.map(color_general, subset=['Tendencia H1'])
+                      .map(color_rsi, subset=['RSI H1'])
+                      .map(color_macd, subset=['MACD H1']), 
+            use_container_width=True, hide_index=True
+        )
         
     st.markdown("---")
     st.markdown("### ⚡ 3. Matriz de Gatillo y Ejecución Operativa (M5)")
     if datos_m5:
         df_m5 = pd.DataFrame(datos_m5)
-        st.dataframe(df_m5.style.map(color_filas, subset=['Gatillo M5', 'RECOMENDACIÓN OPE']), use_container_width=True, hide_index=True)
+        st.dataframe(
+            df_m5.style.map(color_general, subset=['Gatillo M5', 'RECOMENDACIÓN OPE'])
+                      .map(color_rsi, subset=['RSI M5'])
+                      .map(color_macd, subset=['MACD M5']), 
+            use_container_width=True, hide_index=True
+        )
 
     st.caption(f"Última actualización general de mercado a las: {datetime.now().strftime('%H:%M:%S')}")
 else:
-    st.info("Presiona el botón en la barra lateral para procesar y dividir el análisis en sus 3 tablas correspondientes.")
+    st.info("Presiona el botón en la barra lateral para procesar el análisis multitemporal.")
