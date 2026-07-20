@@ -1,7 +1,6 @@
 import streamlit as st
 import yfinance as yf
 import pandas as pd
-import pandas_ta as ta
 import requests
 from datetime import datetime
 
@@ -32,22 +31,24 @@ def enviar_telegram(mensaje):
         try: requests.post(url, json=payload)
         except Exception: pass
 
-def calcular_indicadores(df):
-    df['EMA30'] = ta.ema(df['Close'], length=30)
-    df['EMA50'] = ta.ema(df['Close'], length=50)
-    df['EMA100'] = ta.ema(df['Close'], length=100)
-    df['EMA200'] = ta.ema(df['Close'], length=200)
-    df['RSI'] = ta.rsi(df['Close'], length=14)
-    macd_df = ta.macd(df['Close'], fast=12, slow=26, signal=9)
-    if macd_df is not None:
-        df['MACD'] = macd_df['MACD_12_26_9']
+def calcular_indicadores_nativos(df):
+    # Cálculo matemático de tus 4 EMAs sin librerías externas
+    df['EMA30'] = df['Close'].ewm(span=30, adjust=False).mean()
+    df['EMA50'] = df['Close'].ewm(span=50, adjust=False).mean()
+    df['EMA100'] = df['Close'].ewm(span=100, adjust=False).mean()
+    df['EMA200'] = df['Close'].ewm(span=200, adjust=False).mean()
+    
+    # MACD Estándar (12, 26, 9) hecho de forma nativa
+    ema12 = df['Close'].ewm(span=12, adjust=False).mean()
+    ema26 = df['Close'].ewm(span=26, adjust=False).mean()
+    df['MACD'] = ema12 - ema26
     return df
 
 if st.sidebar.button("🚀 INICIAR ESCANEO DE MERCADOS", use_container_width=True):
     col1, col2 = st.columns([2, 1])
     
     with col1:
-        st.subheader("🔥 Alertas de Entrada Confirmadas (H1 / M5)")
+        st.subheader("🔥 Alertas de Entrada Confirmadas (H1)")
         alertas_encontradas = []
         todos_los_activos = [("Acciones", x) for x in lista_acciones] + [("Forex", x) for x in lista_forex] + [("Crypto", x) for x in lista_crypto]
         
@@ -61,22 +62,24 @@ if st.sidebar.button("🚀 INICIAR ESCANEO DE MERCADOS", use_container_width=Tru
                 df_h1 = ticker.history(period="15d", interval="1h")
                 if df_h1.empty or len(df_h1) < 200: continue
                 
-                df_h1 = calcular_indicadores(df_h1)
+                df_h1 = calcular_indicadores_nativos(df_h1)
                 last_h1 = df_h1.iloc[-1]
                 prev_h1 = df_h1.iloc[-2]
                 
+                # Tu estrategia: alineación en abanico de las 4 EMAs
                 alcista_h1 = last_h1['EMA30'] > last_h1['EMA50'] > last_h1['EMA100'] > last_h1['EMA200']
                 bajista_h1 = last_h1['EMA30'] < last_h1['EMA50'] < last_h1['EMA100'] < last_h1['EMA200']
                 
+                # Tu estrategia: cruce de la línea cero del MACD
                 cruce_positivo_macd = (prev_h1['MACD'] < 0) and (last_h1['MACD'] > 0)
                 cruce_negativo_macd = (prev_h1['MACD'] > 0) and (last_h1['MACD'] < 0)
                 
                 if alcista_h1 and cruce_positivo_macd:
-                    st.success(f"🟢 **COMPRA EN {activo} ({cat})**: EMAs alineadas en abanico y MACD cruzó la línea cero a positivo en H1.")
-                    alertas_encontradas.append(f"🟢 *COMPRA* en {activo} - EMAs & MACD Alineados")
+                    st.success(f"🟢 **COMPRA EN {activo} ({cat})**: EMAs en abanico alcista y MACD cruzando el nivel 0 a positivo.")
+                    alertas_encontradas.append(f"🟢 *COMPRA* en {activo} - EMAs & MACD en 0+")
                 elif bajista_h1 and cruce_negativo_macd:
-                    st.error(f"🔴 **VENTA EN {activo} ({cat})**: EMAs alineadas a la baja y MACD cruzó la línea cero a negativo en H1.")
-                    alertas_encontradas.append(f"🔴 *VENTA* en {activo} - EMAs & MACD Alineados")
+                    st.error(f"🔴 **VENTA EN {activo} ({cat})**: EMAs en abanico bajista y MACD cruzando el nivel 0 a negativo.")
+                    alertas_encontradas.append(f"🔴 *VENTA* en {activo} - EMAs & MACD en 0-")
             except Exception:
                 pass
                 
