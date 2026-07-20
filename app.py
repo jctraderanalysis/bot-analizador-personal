@@ -10,7 +10,7 @@ st.set_page_config(
     layout="wide"
 )
 
-st.title("📊 Escáner Multitemporal Avanzado (Personal)")
+st.title("📊 Escáner Multitemporal de Precisión (M5 | H1 | H4)")
 
 # --- BARRA LATERAL ---
 st.sidebar.header("⚙️ Configuración del Sistema")
@@ -25,36 +25,37 @@ lista_acciones = [x.strip() for x in acciones_input.split(",") if x.strip()]
 lista_forex = [x.strip() for x in forex_input.split(",") if x.strip()]
 lista_crypto = [x.strip() for x in crypto_input.split(",") if x.strip()]
 
-def enviar_telegram(mensaje):
-    if token_telegram and chat_id_telegram:
-        url = f"https://api.telegram.org/bot{token_telegram}/sendMessage"
-        payload = {"chat_id": chat_id_telegram, "text": mensaje, "parse_mode": "Markdown"}
-        try: requests.post(url, json=payload)
-        except Exception: pass
-
-def calcular_indicadores_completos(df):
-    # Tus 4 EMAs Clave
+def calcular_indicadores(df):
+    if df.empty or len(df) < 200:
+        return None
+    # Estructura de tus 4 EMAs
     df['EMA30'] = df['Close'].ewm(span=30, adjust=False).mean()
     df['EMA50'] = df['Close'].ewm(span=50, adjust=False).mean()
     df['EMA100'] = df['Close'].ewm(span=100, adjust=False).mean()
     df['EMA200'] = df['Close'].ewm(span=200, adjust=False).mean()
     
-    # MACD Nativo
+    # MACD
     ema12 = df['Close'].ewm(span=12, adjust=False).mean()
     ema26 = df['Close'].ewm(span=26, adjust=False).mean()
     df['MACD'] = ema12 - ema26
     
-    # RSI Nativo de 14 períodos
+    # RSI 14
     delta = df['Close'].diff()
     gain = (delta.where(delta > 0, 0)).ewm(alpha=1/14, adjust=False).mean()
     loss = (-delta.where(delta < 0, 0)).ewm(alpha=1/14, adjust=False).mean()
     rs = gain / loss
     df['RSI'] = 100 - (100 / (1 + rs))
-    
     return df
 
-if st.sidebar.button("🚀 INICIAR ESCANEO DE MERCADOS", use_container_width=True):
-    alertas_encontradas = []
+def evaluar_direccion(last_row):
+    # Evalúa si las EMAs están en abanico
+    alcista = last_row['EMA30'] > last_row['EMA50'] > last_row['EMA100'] > last_row['EMA200']
+    bajista = last_row['EMA30'] < last_row['EMA50'] < last_row['EMA100'] < last_row['EMA200']
+    if alcista: return "ALCISTA"
+    if bajista: return "BAJISTA"
+    return "NEUTRO"
+
+if st.sidebar.button("🚀 INICIAR ESCANEO MULTITEMPORAL", use_container_width=True):
     filas_monitoreo = []
     todos_los_activos = [("Acciones", x) for x in lista_acciones] + [("Forex", x) for x in lista_forex] + [("Crypto", x) for x in lista_crypto]
     
@@ -65,79 +66,68 @@ if st.sidebar.button("🚀 INICIAR ESCANEO DE MERCADOS", use_container_width=Tru
         progreso.progress((idx + 1) / total)
         try:
             ticker = yf.Ticker(activo)
-            df_h1 = ticker.history(period="15d", interval="1h")
-            if df_h1.empty or len(df_h1) < 200: continue
             
-            df_h1 = calcular_indicadores_completos(df_h1)
+            # 1. Descarga y cálculo de marcos de tiempo (H4, H1, M5)
+            df_h4 = calcular_indicadores(ticker.history(period="60d", interval="4h"))
+            df_h1 = calcular_indicadores(ticker.history(period="15d", interval="1h"))
+            df_m5 = calcular_indicadores(ticker.history(period="2d", interval="5m"))
+            
+            if df_h4 is None or df_h1 is None or df_m5 is None:
+                continue
+                
+            last_h4 = df_h4.iloc[-1]
             last_h1 = df_h1.iloc[-1]
-            prev_h1 = df_h1.iloc[-2]
+            last_m5 = df_m5.iloc[-1]
             
-            # Evaluación de alineación en abanico de tus 4 EMAs
-            alcista_h1 = last_h1['EMA30'] > last_h1['EMA50'] > last_h1['EMA100'] > last_h1['EMA200']
-            bajista_h1 = last_h1['EMA30'] < last_h1['EMA50'] < last_h1['EMA100'] < last_h1['EMA200']
+            # Determinación de las piernas dominantes por alineación de EMAs
+            pierna_h4 = evaluar_direccion(last_h4)
+            pierna_h1 = evaluar_direccion(last_h1)
+            pierna_m5 = evaluar_direccion(last_m5)
             
-            estado_emas = "🟢 Alcistas" if alcista_h1 else ("🔴 Bajistas" if bajista_h1 else "🟡 Entrelazadas")
-            
-            # Formato visual del RSI según niveles operativos
-            rsi_val = last_h1['RSI']
-            if rsi_val >= 70: estado_rsi = f"🚨 {rsi_val:.2f} (Sobrecompra)"
-            elif rsi_val <= 30: estado_rsi = f"🛒 {rsi_val:.2f} (Sobreventa)"
-            else: estado_rsi = f"⚖️ {rsi_val:.2f}"
-            
-            cruce_positivo_macd = (prev_h1['MACD'] < 0) and (last_h1['MACD'] > 0)
-            cruce_negativo_macd = (prev_h1['MACD'] > 0) and (last_h1['MACD'] < 0)
-            
-            estado_macd = "🔥 Cruce Alcista 0+" if cruce_positivo_macd else ("💥 Cruce Bajista 0-" if cruce_negativo_macd else f"{last_h1['MACD']:.4f}")
-            
-            # Redondeo adaptativo dinámico según el tipo de activo (Forex usa más decimales)
+            # 2. Lógica Algorítmica de Recomendación de Entrada
+            # Compra: Tendencias mayores acompañan y M5 confirma el trigger o el quiebre
+            if pierna_h4 == "ALCISTA" and pierna_h1 == "ALCISTA" and pierna_m5 == "ALCISTA" and last_m5['RSI'] < 70:
+                recomendacion = "🟢 COMPRA CONFIRMADA"
+            elif pierna_h4 == "BAJISTA" and pierna_h1 == "BAJISTA" and pierna_m5 == "BAJISTA" and last_m5['RSI'] > 30:
+                recomendacion = "🔴 VENTA CONFIRMADA"
+            # Contratendencia o rebotes controlados
+            elif pierna_h1 == "ALCISTA" and pierna_m5 == "ALCISTA":
+                recomendacion = "🟡 COMPRA RIESGO (H4 Neutro/Abajo)"
+            elif pierna_h1 == "BAJISTA" and pierna_m5 == "BAJISTA":
+                recomendacion = "🟡 VENTA RIESGO (H4 Neutro/Arriba)"
+            else:
+                recomendacion = "⚪ NEUTRO (Esperar Alineación)"
+                
             dec = 4 if cat == "Forex" else 2
             
             filas_monitoreo.append({
-                "Mercado": cat,
                 "Activo": activo,
-                "Precio Actual": round(last_h1['Close'], dec),
-                "Estructura EMAs": estado_emas,
-                "EMA 30": round(last_h1['EMA30'], dec),
-                "EMA 50": round(last_h1['EMA50'], dec),
-                "EMA 100": round(last_h1['EMA100'], dec),
-                "EMA 200": round(last_h1['EMA200'], dec),
-                "RSI (14)": estado_rsi,
-                "Hist. MACD": estado_macd
+                "C/C (Cierre)": round(last_m5['Close'], dec),
+                "Pierna H4": "🟢 ALC" if pierna_h4 == "ALCISTA" else ("🔴 BAJ" if pierna_h4 == "BAJISTA" else "🟡 MIX"),
+                "Pierna H1": "🟢 ALC" if pierna_h1 == "ALCISTA" else ("🔴 BAJ" if pierna_h1 == "BAJISTA" else "🟡 MIX"),
+                "Estado M5": "🟢 ALC" if pierna_m5 == "ALCISTA" else ("🔴 BAJ" if pierna_m5 == "BAJISTA" else "🟡 MIX"),
+                "RSI M5": round(last_m5['RSI'], 1),
+                "MACD M5": round(last_m5['MACD'], dec),
+                "RECOMENDACIÓN": recomendacion
             })
-            
-            if alcista_h1 and cruce_positivo_macd:
-                alertas_encontradas.append((activo, cat, "🟢 COMPRA", "EMAs alineadas + Cruce MACD 0+"))
-            elif bajista_h1 and cruce_negativo_macd:
-                alertas_encontradas.append((activo, cat, "🔴 VENTA", "EMAs bajistas + Cruce MACD 0-"))
         except Exception:
             pass
-            
-    # --- INTERFAZ DE PANTALLA ---
-    col1, col2 = st.columns([2, 1])
-    
-    with col1:
-        st.subheader("🔥 Alertas de Entrada Inmediatas")
-        if alertas_encontradas:
-            for act, cat, tipo, det in alertas_encontradas:
-                if "COMPRA" in tipo:
-                    st.success(f"**{tipo} en {act} ({cat})**: {det}")
-                else:
-                    st.error(f"**{tipo} en {act} ({cat})**: {det}")
-            
-            msg_tele = "🔥 *ALERTAS DETECTADAS* 🔥\n\n" + "\n".join([f"{t} en {a}" for a, c, t, d in alertas_encontradas])
-            enviar_telegram(msg_tele)
-        else:
-            st.info("No se detectaron cruces de confirmación exactos en la vela actual.")
-            
-    with col2:
-        st.subheader("📊 Control Operativo")
-        st.metric("Último Escaneo Realizado", datetime.now().strftime("%H:%M:%S"))
-        
-    # --- MATRIZ EXTENDIDA ---
-    st.markdown("---")
-    st.subheader("📋 Matriz Completa de Datos Técnicos en Vivo (H1)")
+
+    # --- INTERFAZ ---
+    st.subheader("📋 Matriz de Decisión Multitemporal en Tiempo Real")
     if filas_monitoreo:
         df_vis = pd.DataFrame(filas_monitoreo)
-        st.dataframe(df_vis, use_container_width=True, hide_index=True)
+        
+        # Estilos visuales dinámicos para la columna de Recomendación
+        def color_recomendacion(val):
+            if "🟢" in val: return 'background-color: #d4edda; color: #155724; font-weight: bold;'
+            if "🔴" in val: return 'background-color: #f8d7da; color: #721c24; font-weight: bold;'
+            if "🟡" in val: return 'background-color: #fff3cd; color: #856404;'
+            return 'color: #6c757d;'
+
+        st.dataframe(df_vis.style.applymap(color_recomendacion, subset=['RECOMENDACIÓN']), use_container_width=True, hide_index=True)
+        st.metric("Última Actualización", datetime.now().strftime("%H:%M:%S"))
+    else:
+        st.error("No se pudieron recopilar suficientes datos de los servidores. Reintenta el escaneo.")
 else:
-    st.info("Presiona el botón en la barra lateral para escanear tus mercados con tu estrategia.")
+    st.info("Presiona el botón en la barra lateral para procesar el análisis de pantallas H4 -> H1 -> M5.")
