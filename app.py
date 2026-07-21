@@ -23,18 +23,13 @@ st.sidebar.header("⚙️ Configuración del Sistema")
 token_telegram = st.sidebar.text_input("Telegram Bot Token", value=st.secrets.get("TELEGRAM_TOKEN", ""), type="password")
 chat_id_telegram = st.sidebar.text_input("Telegram Chat ID", value=st.secrets.get("TELEGRAM_CHAT_ID", ""), type="password")
 
-st.sidebar.markdown("---")
 acciones_input = st.sidebar.text_area("Acciones", "AAPL,MSFT,NVDA,TSLA,AMD,AMZN")
-st.sidebar.markdown("---")
 forex_input = st.sidebar.text_area("Forex", "EURUSD=X,GBPUSD=X,AUDUSD=X")
-st.sidebar.markdown("---")
 crypto_input = st.sidebar.text_area("Crypto", "BTC-USD,ETH-USD")
-st.sidebar.markdown("---")
 
 lista_acciones = [x.strip() for x in acciones_input.split(",") if x.strip()]
 lista_forex = [x.strip() for x in forex_input.split(",") if x.strip()]
 lista_crypto = [x.strip() for x in crypto_input.split(",") if x.strip()]
-
 
 # --- COPYRIGHT EN LA BARRA LATERAL ---
 st.sidebar.markdown("---")
