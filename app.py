@@ -34,6 +34,7 @@ lista_crypto = [x.strip() for x in crypto_input.split(",") if x.strip()]
 # --- COPYRIGHT EN LA BARRA LATERAL ---
 st.sidebar.markdown("---")
 st.sidebar.caption("© 2026 JC Trader Analysis. Todos los derechos reservados.")
+st.sidebar.markdown("---")
 
 # --- FUNCIÓN DE ENVÍO DIRECTO POR GMAIL ---
 def enviar_correo_directo(destinatario, asunto, contenido):
