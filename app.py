@@ -30,7 +30,7 @@ crypto_input = st.sidebar.text_area("Crypto", "BTC-USD,ETH-USD")
 lista_acciones = [x.strip() for x in acciones_input.split(",") if x.strip()]
 lista_forex = [x.strip() for x in forex_input.split(",") if x.strip()]
 lista_crypto = [x.strip() for x in crypto_input.split(",") if x.strip()]
-COPY
+# --- COPU ---
 # --- FUNCIÓN DE ENVÍO DIRECTO POR GMAIL ---
 def enviar_correo_directo(destinatario, asunto, contenido):
     remitente = st.secrets.get("EMAIL_SENDER", "")
